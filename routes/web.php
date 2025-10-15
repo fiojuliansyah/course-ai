@@ -19,7 +19,7 @@ use App\Http\Controllers\Student\LearningProgressController;
 
 
 Route::get('/', function () {
-    return view('welcome');
+    return redirect()->route('login');
 });
 
 Route::get('/dashboard', function () {
