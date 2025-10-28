@@ -18,6 +18,7 @@ class Course extends Model
         'price',
         'status',
         'thumbnail_path',
+        'syllabus_path'
     ];
 
     public function category()

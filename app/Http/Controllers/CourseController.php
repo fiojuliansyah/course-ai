@@ -7,7 +7,8 @@ use App\Models\Course;
 use App\Models\Category;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Storage; // Tambahkan ini untuk Storage
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 
 class CourseController extends Controller
 {
@@ -32,15 +33,20 @@ class CourseController extends Controller
             'price' => 'required|integer|min:0',
             'short_description' => 'nullable|string|max:200',
             'content' => 'required',
-            'thumbnail' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048', // Validasi Thumbnail
+            'thumbnail' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
+            'syllabus' => 'nullable|file|mimes:pdf,doc,docx|max:10240',
         ]);
 
         $slug = Str::slug($request->title) . '-' . time();
         $thumbnailPath = null;
+        $syllabusPath = null;
 
         if ($request->hasFile('thumbnail')) {
-            // Simpan gambar ke storage/app/public/thumbnails
             $thumbnailPath = $request->file('thumbnail')->store('thumbnails', 'public');
+        }
+        
+        if ($request->hasFile('syllabus')) {
+            $syllabusPath = $request->file('syllabus')->store('syllabi', 'public');
         }
 
         Course::create([
@@ -51,7 +57,8 @@ class CourseController extends Controller
             'short_description' => $request->short_description,
             'content' => $request->content,
             'status' => 'draft',
-            'thumbnail_path' => $thumbnailPath, // Simpan path yang dikembalikan oleh Storage
+            'thumbnail_path' => $thumbnailPath,
+            'syllabus_path' => $syllabusPath,
         ]);
 
         return redirect()->route('admin.courses.index')
@@ -72,7 +79,8 @@ class CourseController extends Controller
             'price' => 'required|integer|min:0',
             'short_description' => 'nullable|string|max:200',
             'content' => 'required',
-            'thumbnail' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048', // Validasi Thumbnail
+            'thumbnail' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
+            'syllabus' => 'nullable|file|mimes:pdf,doc,docx|max:10240',
         ]);
         
         $slug = ($request->title !== $course->title) 
@@ -80,14 +88,20 @@ class CourseController extends Controller
                 : $course->slug;
 
         $thumbnailPath = $course->thumbnail_path;
+        $syllabusPath = $course->syllabus_path;
 
         if ($request->hasFile('thumbnail')) {
-            // Hapus thumbnail lama jika ada
             if ($course->thumbnail_path) {
                 Storage::disk('public')->delete($course->thumbnail_path);
             }
-            // Simpan gambar baru
             $thumbnailPath = $request->file('thumbnail')->store('thumbnails', 'public');
+        }
+        
+        if ($request->hasFile('syllabus')) {
+            if ($course->syllabus_path) {
+                Storage::disk('public')->delete($course->syllabus_path);
+            }
+            $syllabusPath = $request->file('syllabus')->store('syllabi', 'public');
         }
 
         $course->update([
@@ -99,6 +113,7 @@ class CourseController extends Controller
             'content' => $request->content,
             'status' => $request->status ?? $course->status,
             'thumbnail_path' => $thumbnailPath,
+            'syllabus_path' => $syllabusPath,
         ]);
 
         return redirect()->route('admin.courses.index')
@@ -109,6 +124,10 @@ class CourseController extends Controller
     {
         if ($course->thumbnail_path) {
             Storage::disk('public')->delete($course->thumbnail_path);
+        }
+        
+        if ($course->syllabus_path) {
+            Storage::disk('public')->delete($course->syllabus_path);
         }
         
         $course->delete();

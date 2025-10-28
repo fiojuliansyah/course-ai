@@ -23,7 +23,7 @@ class CourseModuleController extends Controller
 
         $module->update($request->only('title', 'description', 'order'));
 
-        return redirect()->route('admin.courses.syllabus.index', $module->course_id)
+        return redirect()->route('admin.courses.material.index', $module->course_id)
                          ->with('success', 'Modul berhasil diperbarui.');
     }
 
@@ -44,7 +44,7 @@ class CourseModuleController extends Controller
             'order' => $order,
         ]);
 
-        return redirect()->route('admin.courses.syllabus.index', $request->course_id)
+        return redirect()->route('admin.courses.material.index', $request->course_id)
                          ->with('success', 'Modul baru berhasil ditambahkan secara manual.');
     }
 
@@ -53,7 +53,7 @@ class CourseModuleController extends Controller
         $courseId = $module->course_id;
         $module->delete();
 
-        return redirect()->route('admin.courses.syllabus.index', $courseId)
+        return redirect()->route('admin.courses.material.index', $courseId)
                          ->with('success', 'Modul berhasil dihapus.');
     }
 }

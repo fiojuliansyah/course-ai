@@ -27,7 +27,7 @@ class ModuleMaterialController extends Controller
 
         $courseId = CourseModule::find($material->module_id)->course_id;
 
-        return redirect()->route('admin.courses.syllabus.index', $courseId)
+        return redirect()->route('admin.courses.materials.index', $courseId)
                          ->with('success', 'Materi berhasil diperbarui.');
     }
     
@@ -50,7 +50,7 @@ class ModuleMaterialController extends Controller
 
         $courseId = CourseModule::find($request->module_id)->course_id;
 
-        return redirect()->route('admin.courses.syllabus.index', $courseId)
+        return redirect()->route('admin.courses.materials.index', $courseId)
                          ->with('success', 'Materi baru berhasil ditambahkan.');
     }
 
@@ -63,7 +63,7 @@ class ModuleMaterialController extends Controller
         $courseId = $material->module->course_id;
         $material->delete();
 
-        return redirect()->route('admin.courses.syllabus.index', $courseId)
+        return redirect()->route('admin.courses.materials.index', $courseId)
                          ->with('success', 'Materi berhasil dihapus.');
     }
 }

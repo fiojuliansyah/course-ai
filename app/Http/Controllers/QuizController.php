@@ -67,7 +67,7 @@ class QuizController extends Controller
         set_time_limit(120);
 
         $numQuestions = (int) $request->json('num_questions', 3);
-        $numQuestions = max(1, min(10, $numQuestions));
+        $numQuestions = max(1, min(10, $numQuestions)); 
 
         $course->load(['modules.materials']);
         $allContent = '';
@@ -88,7 +88,7 @@ class QuizController extends Controller
         $courseTitle = $course->title;
 
         try {
-            $prompt = "Berdasarkan konten kursus berikut, buatkan {$numQuestions} pertanyaan kuis. Tipe pertanyaan harus bervariasi secara acak antara 'single', 'multiple', atau 'essay'. Tentukan bobot nilai ('points') antara 1 sampai 5 (sesuaikan dengan tingkat kesulitan: 1-2 mudah, 3-4 sedang, 5 sulit).\n\n--- ATURAN JAWABAN ---\n- Single/Multiple Choice: 4 opsi jawaban, dan berikan 'correct_index' (integer 0-3).\n- Essay: Berikan 'correct_answer' berupa string model jawaban yang lengkap.\n\nKonten: \n\n--- KONTEN KURSUS: {$courseTitle} ---\n{$limitedContent}\n\n--- INSTRUKSI OUTPUT ---\nHasilkan output dalam format JSON VALID, array of objects, dengan keys: 'type' (string: single/multiple/essay), 'text', 'options' (array of 4 strings, jika choice), 'correct_index' (integer 0-3, jika choice), 'correct_answer' (string, jika essay), dan 'points' (integer 1-5).";
+            $prompt = "Berdasarkan konten kursus berikut, buatkan {$numQuestions} pertanyaan kuis. Tipe pertanyaan harus bervariasi secara acak antara 'single', 'multiple', atau 'essay'. Tentukan bobot nilai ('points') antara 1 sampai 5 (sesuaikan dengan tingkat kesulitan: 1-2 mudah, 3-4 sedang, 5 sulit).\n\n--- ATURAN JAWABAN ---\n- Single/Multiple Choice: Wajib 4 opsi jawaban. Indeks jawaban yang benar ('correct_index') harus angka integer 0 sampai 3.\n- Essay: Berikan 'correct_answer' berupa string model jawaban yang lengkap.\n\nKonten: \n\n--- KONTEN KURSUS: {$courseTitle} ---\n{$limitedContent}\n\n--- INSTRUKSI OUTPUT ---\nHasilkan output dalam format JSON VALID, yang merupakan **ARRAY UTAMA** dari objects pertanyaan (JANGAN gunakan kunci parent seperti 'questions' atau 'quizzes'). Keys yang WAJIB ada di setiap object: 'type' (string: single/multiple/essay), 'text', 'options' (array of 4 strings, jika choice), 'correct_index' (integer 0-3, jika choice), 'correct_answer' (string, jika essay), dan 'points' (integer 1-5).";
 
             $apiKey = env('OPENAI_API_KEY');
             $response = Http::withHeaders([
@@ -106,26 +106,30 @@ class QuizController extends Controller
             ]);
 
             if (!$response->successful()) {
-                return response()->json(['error' => 'OpenAI API Error: ' . $response->status()], 502);
+                Log::error('OpenAI API Error', ['status' => $response->status(), 'response' => $response->body()]);
+                return response()->json(['error' => 'OpenAI API Error: Gagal mendapatkan respons dari server.'], 502);
             }
 
             $content = Arr::get($response->json(), 'choices.0.message.content', '');
             $payload = json_decode(trim($content, " \n\r\t\v\0"), true);
             
-            if (json_last_error() !== JSON_ERROR_NONE || !is_array($payload)) {
-                 Log::error('AI Question JSON Parsing Failed. Raw Response:', ['content' => $content]);
-                 return response()->json(['error' => 'Gagal memproses JSON dari AI. Coba lagi atau cek log.'], 500);
+            $questionArray = [];
+            
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                 if (isset($payload['questions']) && is_array($payload['questions'])) {
+                     $questionArray = $payload['questions'];
+                 } elseif (isset($payload['quizzes']) && is_array($payload['quizzes'])) {
+                     $questionArray = $payload['quizzes'];
+                 } else {
+                     Log::error('AI Question JSON Parsing Failed.', ['content' => $content]);
+                     return response()->json(['error' => 'Gagal memproses JSON dari AI. Silakan coba lagi.'], 500);
+                 }
+            } else {
+                $questionArray = $payload;
             }
             
-            $questionArray = $payload;
-            if (isset($payload['questions']) && is_array($payload['questions'])) {
-                $questionArray = $payload['questions'];
-            } elseif (isset($payload['quizzes']) && is_array($payload['quizzes'])) {
-                $questionArray = $payload['quizzes'];
-            }
-            
-            if (!is_array($questionArray)) {
-                 return response()->json(['error' => 'Output JSON AI tidak mengandung array pertanyaan yang valid.'], 500);
+            if (empty($questionArray) || !is_array($questionArray)) {
+                 return response()->json(['error' => 'Output JSON AI kosong atau tidak mengandung array pertanyaan yang valid.'], 500);
             }
 
             $count = 0;
@@ -136,6 +140,7 @@ class QuizController extends Controller
                 
                 $options = null;
                 $correctAnswer = null;
+                $isValid = false;
 
                 if (in_array($type, ['single', 'multiple'])) {
                     $options = Arr::get($q, 'options');
@@ -144,25 +149,26 @@ class QuizController extends Controller
                     
                     if (is_array($options) && count($options) >= 2 && !is_null($correctIndex) && $correctIndex >= 0 && $correctIndex < count($options)) {
                         $correctAnswer = $correctIndex;
+                        $isValid = true;
                     } else {
                         Log::warning('Gagal validasi data Choice AI.', ['data' => $q]);
-                        continue;
                     }
                 } elseif ($type === 'essay') {
                     $correctAnswer = Arr::get($q, 'correct_answer') ?? Arr::get($q, 'answer_model');
-                    if (empty($correctAnswer)) {
+                    if (!empty($correctAnswer)) {
+                        $isValid = true;
+                    } else {
                         Log::warning('Gagal validasi data Essay AI (Jawaban Kosong).', ['data' => $q]);
-                        continue;
                     }
                 }
 
-                if ($text) {
+                if ($text && $isValid) {
                     Question::create([
                         'course_id' => $course->id,
                         'type' => $type,
                         'text' => $text,
                         'points' => max(1, min(5, (int)$points)),
-                        'options' => $options,
+                        'options' => array_values(array_filter($options ?? [])), 
                         'correct_answer' => $correctAnswer,
                     ]);
                     $count++;
@@ -180,11 +186,6 @@ class QuizController extends Controller
         }
     }
     
-    public function edit(Course $course, Question $question)
-    {
-        return view('admin.quizzes.edit', compact('course', 'question'));
-    }
-
     public function update(Request $request, Course $course, Question $question)
     {
         $validated = $request->validate([

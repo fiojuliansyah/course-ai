@@ -22,6 +22,7 @@ return new class extends Migration
             $table->integer('students_count')->default(0);
             $table->enum('status', ['draft', 'active'])->default('draft');
             $table->string('thumbnail_path')->nullable();
+            $table->string('syllabus_path')->nullable();
             
             $table->foreignId('category_id')
                   ->nullable() 

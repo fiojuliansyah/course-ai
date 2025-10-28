@@ -30,16 +30,23 @@
                     </nav>
                 </div>
 
+                {{-- KOLOM KANAN KECIL: PROGRESS & QUIZ BUTTON --}}
                 <div class="bg-white shadow-xl rounded-xl p-6 border border-gray-100">
                     <h2 class="text-xl font-bold text-gray-800 mb-4 border-b pb-2">Progres Belajar</h2>
                     <div class="text-center my-6">
                         <div class="w-24 h-24 mx-auto border-4 border-indigo-200 rounded-full flex items-center justify-center text-indigo-600 text-xl font-bold">
-                            45%
+                            0%
                         </div>
                         <p class="mt-3 text-gray-600">Total Progres Selesai</p>
                     </div>
                     <div class="space-y-2 mt-4 border-t pt-4">
-                        <button class="w-full bg-blue-100 text-blue-700 py-2 rounded-lg text-sm hover:bg-blue-200">Lihat Riwayat Kuis</button>
+                        
+                        {{-- TOMBOL BARU: LINK KE KUIS --}}
+                        <a href="{{ route('student.courses.quiz.show', $course) }}" class="w-full bg-blue-600 text-white py-2 rounded-lg text-sm hover:bg-blue-700 font-semibold flex items-center justify-center transition">
+                            <svg class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                            Mulai Kuis Akhir
+                        </a>
+                        
                         <button class="w-full bg-yellow-100 text-yellow-700 py-2 rounded-lg text-sm hover:bg-yellow-200">Kirim Feedback</button>
                     </div>
                 </div>
@@ -63,7 +70,8 @@
                                         @if ($material->content)
                                             <button type="button" class="view-content-btn text-sm text-indigo-600 hover:text-indigo-800"
                                                 data-title="{{ $material->title }}"
-                                                data-content="{{ $material->content }}">
+                                                data-content="{{ $material->content }}"
+                                                data-material-id="{{ $material->id }}">
                                                 Lihat Konten
                                             </button>
                                         @endif
@@ -73,12 +81,6 @@
                                                 Download
                                             </a>
                                         @endif
-
-                                        {{-- Add Selesai Membaca button --}}
-                                        <button type="button" class="finish-reading-btn text-sm text-white bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-md"
-                                                data-material-id="{{ $material->id }}">
-                                            Selesai Membaca
-                                        </button>
                                     </div>
                                 </li>
                             @empty
@@ -126,77 +128,96 @@
         const contentModalBody = document.getElementById('content-modal-body');
         const closeContentModalBtn = document.getElementById('close-content-modal');
         const viewContentButtons = document.querySelectorAll('.view-content-btn');
-        const finishReadingButtons = document.querySelectorAll('.finish-reading-btn');
+        
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
 
-        // Function to toggle modal visibility
         function toggleModal(modalId, show) {
             const modal = document.getElementById(modalId);
             if (!modal) return;
             modal.classList.toggle('hidden', !show);
             modal.classList.toggle('flex', show);
         }
+        
+        function markMaterialAsCompleted(materialId) {
+            fetch(`{{ url('student/material') }}/${materialId}/complete`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken,
+                    'Accept': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    // Update status visual
+                    const statusSpan = document.getElementById(`status-${materialId}`);
+                    if (statusSpan) {
+                        statusSpan.textContent = 'SELESAI';
+                        statusSpan.classList.remove('text-gray-400');
+                        statusSpan.classList.add('text-green-500');
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Network or server error:', error);
+            });
+        }
 
-        // Tab navigation
+        // 1. Logic Tab Navigation
         tabButtons.forEach(button => {
             button.addEventListener('click', function() {
                 const targetId = this.getAttribute('data-target');
-                tabButtons.forEach(btn => btn.classList.remove('bg-indigo-600', 'text-white', 'hover:bg-indigo-700'));
-                tabContentItems.forEach(content => content.classList.add('hidden'));
-
+                
+                // Non-aktifkan semua tombol dan sembunyikan semua konten
+                tabButtons.forEach(btn => {
+                    btn.classList.remove('bg-indigo-600', 'text-white', 'hover:bg-indigo-700');
+                    btn.classList.add('text-gray-700', 'hover:bg-indigo-50');
+                });
+                tabContentItems.forEach(content => {
+                    content.classList.add('hidden');
+                });
+                
+                // Aktifkan tombol yang diklik dan tampilkan konten target
                 this.classList.add('bg-indigo-600', 'text-white', 'hover:bg-indigo-700');
+                this.classList.remove('text-gray-700', 'hover:bg-indigo-50');
+                
                 const targetContent = document.getElementById(targetId);
                 if (targetContent) {
                     targetContent.classList.remove('hidden');
                 }
             });
         });
-
-        // Set first tab as active by default
+        
+        // Set Tab pertama aktif secara default (jika ada)
         if (tabButtons.length > 0) {
-            tabButtons[0].click();
+            tabButtons[0].click(); 
         }
 
-        // View content modal logic
+
+        // 2. Logic Menampilkan Modal Konten Dokumen & Mark Complete
         viewContentButtons.forEach(button => {
             button.addEventListener('click', function() {
                 const title = this.getAttribute('data-title');
                 const contentMarkdown = this.getAttribute('data-content');
+                const materialId = this.getAttribute('data-material-id');
 
+                // 1. TANDAI SELESAI VIA AJAX
+                if (materialId) {
+                    markMaterialAsCompleted(materialId);
+                }
+                
+                // 2. TAMPILKAN MODAL
                 contentModalTitle.textContent = title;
-                contentModalBody.innerHTML = marked.parse(contentMarkdown);
+                contentModalBody.innerHTML = marked.parse(contentMarkdown); 
+                
                 toggleModal('content-modal', true);
             });
         });
-
+        
         closeContentModalBtn.addEventListener('click', () => toggleModal('content-modal', false));
         contentModal.addEventListener('click', (e) => {
             if (e.target === contentModal) toggleModal('content-modal', false);
-        });
-
-        // Finish reading button functionality
-        finishReadingButtons.forEach(button => {
-            button.addEventListener('click', function() {
-                const materialId = this.getAttribute('data-material-id');
-
-                fetch(`/student/material/${materialId}/complete`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                    },
-                    body: JSON.stringify({ material_id: materialId })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        this.innerText = 'SELESAI';
-                        this.disabled = true;
-                    }
-                })
-                .catch(error => {
-                    console.error('Error marking material as completed:', error);
-                });
-            });
         });
     });
 </script>

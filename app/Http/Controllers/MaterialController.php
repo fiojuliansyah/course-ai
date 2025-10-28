@@ -13,12 +13,12 @@ use Smalot\PdfParser\Parser;
 use Illuminate\Support\Arr;
 use Exception;
 
-class SyllabusController extends Controller
+class MaterialController extends Controller
 {
     public function index(Course $course)
     {
         $modules = CourseModule::with('materials')->where('course_id', $course->id)->orderBy('order')->get();
-        return view('admin.syllabus.index', compact('course', 'modules'));
+        return view('admin.materials.index', compact('course', 'modules'));
     }
 
     public function generateModules(Request $request, Course $course)
@@ -45,7 +45,6 @@ class SyllabusController extends Controller
 
             $courseTitle = $course->title;
             
-            // PROMPT OPTIMAL: Meminta detail maksimal, format terstruktur, dan hanya 2 level nested JSON
             $prompt = "Kamu adalah spesialis ekstraksi data dan editor konten. Tugasmu adalah: 1) Ekstrak **SEMUA** detail penting dari teks mentah di bawah ini, DILARANG KERAS MELAKUKAN PEMERINGKASAN. 2) Strukturkan teks hasil ekstraksi menjadi Modul dan Materi kursus. 3) Untuk konten setiap materi, format teks yang sudah diekstrak ke dalam **MARKDOWN TERSTRUKTUR** (Gunakan Tabel Markdown, ###, dan List). \n\n--- TEKS MENTAH DARI PDF ---\n{$limitedPdfText}\n\n--- INSTRUKSI OUTPUT ---\n1. Hasilkan output dalam format JSON VALID dengan field 'modules' (array of objects) dan 'summary'.\n2. Setiap Modul harus memiliki 'title', 'description', dan 'materials' (array of objects).\n3. Setiap Materi harus memiliki 'title' dan 'content_detail'.\n4. Field 'content_detail' WAJIB diisi dengan hasil EKSTRAKSI LENGKAP dan diformat MARKDOWN.\n\nHasilkan JSON output sekarang.";
 
             $apiKey = env('OPENAI_API_KEY');
